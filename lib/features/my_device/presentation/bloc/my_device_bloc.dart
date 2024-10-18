@@ -3,9 +3,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/usecases/scan_devices.dart';
 import '../../domain/usecases/connect_device.dart';
 import '../../../../core/usecases/usecase.dart';
+import '../../domain/entities/ble_device.dart';
 import 'package:logger/logger.dart';
-import 'my_device_event.dart';
-import 'my_device_state.dart';
+
+part 'my_device_event.dart';
+part 'my_device_state.dart';
 
 class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
   final ScanDevices scanDevices;
@@ -24,23 +26,19 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
   Future<void> _onScanDevices(
       ScanDevicesEvent event, Emitter<MyDeviceState> emit) async {
     _logger.d('Starting device scan');
-    emit(const MyDeviceScanning());
+    emit(MyDeviceScanning());
 
     final result = await scanDevices(NoParams());
-    _logger.d('Scan completed, processing results');
-
     result.fold(
       (failure) {
         _logger.e('Scan failed: $failure');
-        emit(const MyDeviceError('Failed to scan devices'));
+        emit(MyDeviceError('Failed to scan devices'));
       },
       (devices) {
-        _logger.d('Scan successful. Found ${devices.length} devices');
+        _logger.d('Scan completed. Found ${devices.length} devices');
         emit(MyDeviceScanned(devices));
       },
     );
-
-    _logger.d('Scan process finished, current state: ${state.runtimeType}');
   }
 
   Future<void> _onConnectDevice(
@@ -51,7 +49,7 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
     result.fold(
       (failure) {
         _logger.e('Connection failed: $failure');
-        emit(const MyDeviceError('Failed to connect to device'));
+        emit(MyDeviceError('Failed to connect to device'));
       },
       (success) {
         _logger.i('Successfully connected to device: ${event.device.name}');

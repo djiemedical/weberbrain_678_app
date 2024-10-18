@@ -1,23 +1,12 @@
-// lib/features/my_device/presentation/bloc/my_device_event.dart
-import 'package:equatable/equatable.dart';
-import '../../domain/entities/ble_device.dart';
+part of 'my_device_bloc.dart';
 
-abstract class MyDeviceEvent extends Equatable {
-  const MyDeviceEvent();
-
-  @override
-  List<Object> get props => [];
-}
+abstract class MyDeviceEvent {}
 
 class ScanDevicesEvent extends MyDeviceEvent {}
 
 class ConnectDeviceEvent extends MyDeviceEvent {
   final BleDevice device;
-
-  const ConnectDeviceEvent(this.device);
-
-  @override
-  List<Object> get props => [device];
+  ConnectDeviceEvent(this.device);
 }
 
 class DisconnectDeviceEvent extends MyDeviceEvent {}

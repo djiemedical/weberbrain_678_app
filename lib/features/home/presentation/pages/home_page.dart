@@ -5,7 +5,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../config/routes/app_router.dart';
 import '../../../my_device/presentation/bloc/my_device_bloc.dart';
-import '../../../my_device/presentation/bloc/my_device_state.dart';
 
 @RoutePage()
 class HomePage extends StatelessWidget {

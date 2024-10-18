@@ -14,40 +14,43 @@ abstract class BleDeviceDataSource {
 class BleDeviceDataSourceImpl implements BleDeviceDataSource {
   final Logger _logger = Logger();
   BluetoothDevice? _connectedDevice;
+  bool _isScanning = false;
+  StreamSubscription<List<ScanResult>>? _scanResultsSubscription;
 
   @override
   Future<List<BleDevice>> scanDevices() async {
-    Set<BleDevice> deviceSet = {}; // Use a Set to prevent duplicates
+    List<BleDevice> discoveredDevices = [];
+    if (_isScanning) return discoveredDevices;
+
     _logger.d('Starting BLE scan');
+    _isScanning = true;
 
     try {
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
 
-      await for (final results in FlutterBluePlus.scanResults) {
-        for (ScanResult r in results) {
-          _logger.d(
-              'Found device: ${r.device.platformName} (${r.device.remoteId})');
-          if (r.device.platformName.startsWith('WEH_678')) {
-            BleDevice device = BleDevice(
-              id: r.device.remoteId.str,
-              name: r.device.platformName,
-            );
-            if (deviceSet.add(device)) {
-              // add() returns true if the element was added to the set
-              _logger.i('Adding new WEH device: ${device.name}');
-            }
-          }
-        }
-      }
-    } catch (e) {
-      _logger.e('Error scanning for devices: $e');
-    } finally {
+      _scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
+        discoveredDevices = results
+            .where((r) => r.device.platformName.startsWith('WEH'))
+            .map((r) => BleDevice(
+                  id: r.device.remoteId.str,
+                  name: r.device.platformName,
+                ))
+            .toList();
+        _logger.d('Found ${discoveredDevices.length} WEH devices');
+      }, onError: (e) {
+        _logger.e('Error during scan: $e');
+      });
+
+      await Future.delayed(const Duration(seconds: 15));
       await FlutterBluePlus.stopScan();
-      _logger.d(
-          'BLE scan completed. Found ${deviceSet.length} unique WEH devices');
+    } catch (e) {
+      _logger.e('Error starting scan: $e');
+    } finally {
+      _isScanning = false;
+      await _scanResultsSubscription?.cancel();
     }
 
-    return deviceSet.toList();
+    return discoveredDevices;
   }
 
   @override
