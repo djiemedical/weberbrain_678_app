@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../config/routes/app_router.dart';
 import '../../../my_device/presentation/bloc/my_device_bloc.dart';
+import '../widgets/default_settings_box.dart';
 
 @RoutePage()
 class HomePage extends StatelessWidget {
@@ -28,6 +29,19 @@ class HomePage extends StatelessWidget {
           ),
         ),
         actions: [
+          BlocBuilder<MyDeviceBloc, MyDeviceState>(
+            builder: (context, state) {
+              return IconButton(
+                icon: Icon(
+                  Icons.bluetooth,
+                  color: state is MyDeviceConnected ? Colors.blue : Colors.grey,
+                ),
+                onPressed: () {
+                  context.router.push(const MyDeviceRoute());
+                },
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.notifications, color: Colors.white),
             onPressed: () {
@@ -69,10 +83,10 @@ class HomePage extends StatelessWidget {
                                   color: Colors.white, fontSize: 18),
                             ),
                             const SizedBox(height: 10),
-                            if (_getConnectionStatus(state) == 'Disconnected')
+                            if (state is! MyDeviceConnected)
                               ElevatedButton(
                                 onPressed: () {
-                                  context.pushRoute(const MyDeviceRoute());
+                                  context.router.push(const MyDeviceRoute());
                                 },
                                 child: const Text('My Device'),
                               ),
@@ -84,107 +98,24 @@ class HomePage extends StatelessWidget {
                     const Text(
                       'Default Setting',
                       style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold),
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 20),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final buttonWidth = constraints.maxWidth * 0.9;
-                        return SizedBox(
-                          width: buttonWidth,
-                          child: Column(
-                            children: [
-                              Container(
-                                width: buttonWidth,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2A2D30),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: Colors.white.withOpacity(0.2),
-                                      width: 1),
-                                ),
-                                padding: const EdgeInsets.all(20),
-                                child: Column(
-                                  children: [
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        // Add start functionality
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                            const Color(0xFF2691A5),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 15, horizontal: 80),
-                                      ),
-                                      child: const Text(
-                                        'Start',
-                                        style: TextStyle(
-                                            fontSize: 24, color: Colors.white),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    const Text(
-                                      'Duration',
-                                      style: TextStyle(
-                                          color: Colors.white, fontSize: 16),
-                                    ),
-                                    const Text(
-                                      '30 mins',
-                                      style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(height: 20),
-                                    const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        _SettingItem(
-                                            label: 'Region', value: 'All'),
-                                        _SettingItem(
-                                            label: 'Wavelength', value: 'All'),
-                                        _SettingItem(
-                                            label: 'Output Power',
-                                            value: '50 %'),
-                                        _SettingItem(
-                                            label: 'Frequency', value: '10 Hz'),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              SizedBox(
-                                width: buttonWidth,
-                                child: ElevatedButton(
-                                  onPressed: () {
-                                    // Add manual setting functionality
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF2691A5),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 12),
-                                  ),
-                                  child: const Text(
-                                    'Manual Setting',
-                                    style: TextStyle(
-                                        fontSize: 16, color: Colors.white),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                    BlocBuilder<MyDeviceBloc, MyDeviceState>(
+                      builder: (context, state) {
+                        return DefaultSettingsBox(
+                          isDeviceConnected: state is MyDeviceConnected,
+                          onStartPressed: () {
+                            if (state is MyDeviceConnected) {
+                              context.router.push(SessionTimerRoute(
+                                  durationInSeconds:
+                                      30 * 60)); // 30 minutes in seconds
+                            }
+                          },
                         );
                       },
                     ),
@@ -209,7 +140,7 @@ class HomePage extends StatelessWidget {
         currentIndex: 1,
         onTap: (index) {
           if (index == 2) {
-            context.pushRoute(const JournalRoute());
+            context.router.push(const JournalRoute());
           }
         },
       ),
@@ -224,30 +155,5 @@ class HomePage extends StatelessWidget {
     } else {
       return 'Disconnected';
     }
-  }
-}
-
-class _SettingItem extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SettingItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
   }
 }

@@ -1,4 +1,5 @@
 // lib/config/routes/app_router.dart
+import 'package:flutter/material.dart';
 import 'package:auto_route/auto_route.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';
@@ -8,6 +9,7 @@ import '../../features/authentication/presentation/pages/forgot_password_page.da
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/journal/presentation/pages/journal_page.dart';
 import '../../features/my_device/presentation/pages/my_device_page.dart';
+import '../../features/session_timer/presentation/pages/session_timer_page.dart';
 
 part 'app_router.gr.dart';
 
@@ -23,5 +25,6 @@ class AppRouter extends _$AppRouter {
         AutoRoute(page: HomeRoute.page),
         AutoRoute(page: JournalRoute.page),
         AutoRoute(page: MyDeviceRoute.page),
+        AutoRoute(page: SessionTimerRoute.page),
       ];
 }
