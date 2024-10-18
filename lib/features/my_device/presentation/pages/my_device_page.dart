@@ -5,6 +5,7 @@ import 'package:auto_route/auto_route.dart';
 import '../bloc/my_device_bloc.dart';
 import '../../domain/entities/ble_device.dart';
 import 'package:logger/logger.dart';
+import '../../../../config/routes/app_router.dart';
 
 @RoutePage()
 class MyDevicePage extends StatefulWidget {
@@ -37,6 +38,29 @@ class _MyDevicePageState extends State<MyDevicePage> {
     return name.replaceAll('_', '-');
   }
 
+  void _showConnectionSuccessDialog(BuildContext context, BleDevice device) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Connection Successful'),
+          content:
+              Text('Successfully connected to ${_maskDeviceName(device.name)}'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('OK'),
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                context.router.replace(const HomeRoute());
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -45,11 +69,16 @@ class _MyDevicePageState extends State<MyDevicePage> {
         backgroundColor: const Color(0xFF1F2225),
       ),
       backgroundColor: const Color(0xFF1F2225),
-      body: RefreshIndicator(
-        onRefresh: _handleRefresh,
-        child: BlocBuilder<MyDeviceBloc, MyDeviceState>(
-          builder: (context, state) {
-            return SingleChildScrollView(
+      body: BlocConsumer<MyDeviceBloc, MyDeviceState>(
+        listener: (context, state) {
+          if (state is MyDeviceConnected) {
+            _showConnectionSuccessDialog(context, state.device);
+          }
+        },
+        builder: (context, state) {
+          return RefreshIndicator(
+            onRefresh: _handleRefresh,
+            child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -66,9 +95,9 @@ class _MyDevicePageState extends State<MyDevicePage> {
                   ],
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
     );
   }
