@@ -1,3 +1,4 @@
+// Part file: session_timer_event.dart
 part of 'session_timer_bloc.dart';
 
 abstract class SessionTimerEvent extends Equatable {
@@ -7,21 +8,12 @@ abstract class SessionTimerEvent extends Equatable {
   List<Object> get props => [];
 }
 
-class StartSession extends SessionTimerEvent {
-  final Duration duration;
-
-  const StartSession(this.duration);
-
-  @override
-  List<Object> get props => [duration];
-}
+class StartSession extends SessionTimerEvent {}
 
 class PauseSession extends SessionTimerEvent {}
 
 class ResumeSession extends SessionTimerEvent {}
 
-class StopSession extends SessionTimerEvent {}
+class ResetSession extends SessionTimerEvent {}
 
-class RepeatSession extends SessionTimerEvent {}
-
-class _TimerTick extends SessionTimerEvent {}
+class TickSession extends SessionTimerEvent {}

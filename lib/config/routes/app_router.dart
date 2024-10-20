@@ -1,5 +1,4 @@
 // lib/config/routes/app_router.dart
-import 'package:flutter/material.dart';
 import 'package:auto_route/auto_route.dart';
 import '../../features/splash/presentation/pages/splash_page.dart';
 import '../../features/onboarding/presentation/pages/onboarding_page.dart';

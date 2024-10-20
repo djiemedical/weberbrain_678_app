@@ -5,7 +5,6 @@ import 'package:auto_route/auto_route.dart';
 import '../bloc/my_device_bloc.dart';
 import '../../domain/entities/ble_device.dart';
 import 'package:logger/logger.dart';
-import '../../../../config/routes/app_router.dart';
 
 @RoutePage()
 class MyDevicePage extends StatefulWidget {
@@ -21,7 +20,12 @@ class _MyDevicePageState extends State<MyDevicePage> {
   @override
   void initState() {
     super.initState();
-    _startScan();
+    _checkConnectionStatus();
+  }
+
+  void _checkConnectionStatus() {
+    _logger.d('Checking connection status');
+    context.read<MyDeviceBloc>().add(CheckConnectionStatusEvent());
   }
 
   void _startScan() {
@@ -29,30 +33,67 @@ class _MyDevicePageState extends State<MyDevicePage> {
     context.read<MyDeviceBloc>().add(ScanDevicesEvent());
   }
 
-  Future<void> _handleRefresh() async {
-    _startScan();
-    return Future.delayed(const Duration(seconds: 15));
-  }
-
   String _maskDeviceName(String name) {
     return name.replaceAll('_', '-');
   }
 
-  void _showConnectionSuccessDialog(BuildContext context, BleDevice device) {
+  void _showConnectionDialog(
+      BuildContext context, BleDevice device, bool isConnecting) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text('Connection Successful'),
-          content:
-              Text('Successfully connected to ${_maskDeviceName(device.name)}'),
+          backgroundColor: const Color(0xFF2A2D30),
+          title: Text(
+            isConnecting ? 'Connecting' : 'Disconnecting',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Color(0xFF2691A5)),
+              const SizedBox(height: 16),
+              Text(
+                isConnecting
+                    ? 'Connecting to ${_maskDeviceName(device.name)}...'
+                    : 'Disconnecting from ${_maskDeviceName(device.name)}...',
+                style: const TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showConnectionSuccessDialog(
+      BuildContext context, BleDevice device, bool isConnected) {
+    Navigator.of(context).pop(); // Dismiss the connection/disconnection dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2A2D30),
+          title: Text(
+            isConnected ? 'Connection Successful' : 'Disconnection Successful',
+            style: const TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            isConnected
+                ? 'Successfully connected to ${_maskDeviceName(device.name)}'
+                : 'Successfully disconnected from ${_maskDeviceName(device.name)}',
+            style: const TextStyle(color: Colors.white),
+          ),
           actions: <Widget>[
             TextButton(
-              child: const Text('OK'),
+              child:
+                  const Text('OK', style: TextStyle(color: Color(0xFF2691A5))),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                context.router.replace(const HomeRoute());
+                if (!isConnected) {
+                  _startScan(); // Restart scanning after disconnection
+                }
               },
             ),
           ],
@@ -65,36 +106,52 @@ class _MyDevicePageState extends State<MyDevicePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Device'),
+        title: const Text('My Device', style: TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFF1F2225),
+        iconTheme: const IconThemeData(
+            color: Colors.white), // This makes the back icon white
       ),
       backgroundColor: const Color(0xFF1F2225),
       body: BlocConsumer<MyDeviceBloc, MyDeviceState>(
         listener: (context, state) {
-          if (state is MyDeviceConnected) {
-            _showConnectionSuccessDialog(context, state.device);
+          if (state is MyDeviceConnecting) {
+            _showConnectionDialog(context, state.device, true);
+          } else if (state is MyDeviceConnected) {
+            _showConnectionSuccessDialog(context, state.device, true);
+          } else if (state is MyDeviceDisconnecting) {
+            _showConnectionDialog(context, state.device, false);
+          } else if (state is MyDeviceDisconnected) {
+            _showConnectionSuccessDialog(context, state.device, false);
           }
         },
         builder: (context, state) {
           return RefreshIndicator(
-            onRefresh: _handleRefresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('WEH Devices',
-                        style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white)),
-                    const SizedBox(height: 8),
-                    _buildContent(state),
-                  ],
+            onRefresh: () async {
+              _startScan();
+              await Future.delayed(const Duration(seconds: 2));
+            },
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Paired Devices',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(color: Colors.white),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildContent(state),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           );
         },
@@ -108,7 +165,7 @@ class _MyDevicePageState extends State<MyDevicePage> {
         child: Column(
           children: [
             CircularProgressIndicator(color: Color(0xFF2691A5)),
-            SizedBox(height: 8),
+            SizedBox(height: 16),
             Text('Scanning for devices...',
                 style: TextStyle(color: Colors.white)),
           ],
@@ -116,6 +173,8 @@ class _MyDevicePageState extends State<MyDevicePage> {
       );
     } else if (state is MyDeviceScanned) {
       return _buildDeviceList(state.devices);
+    } else if (state is MyDeviceConnected) {
+      return _buildConnectedDevice(state.device);
     } else if (state is MyDeviceError) {
       return Center(
         child: Text(
@@ -124,10 +183,25 @@ class _MyDevicePageState extends State<MyDevicePage> {
         ),
       );
     } else {
-      return const Center(
-        child: Text(
-          'Pull down to scan for devices',
-          style: TextStyle(color: Colors.white),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'No devices found',
+              style: TextStyle(color: Colors.white),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _startScan,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2691A5),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
+              ),
+              child: const Text('Scan for Devices'),
+            ),
+          ],
         ),
       );
     }
@@ -140,34 +214,97 @@ class _MyDevicePageState extends State<MyDevicePage> {
       itemCount: devices.length,
       itemBuilder: (context, index) {
         final device = devices[index];
-        final deviceType = device.name.substring(4, 7);
-        final iconColor = deviceType == '678' ? Colors.blue : Colors.green;
+        return _buildDeviceCard(device);
+      },
+    );
+  }
 
-        return Card(
-          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          color: const Color(0xFF2A2D30),
-          child: ListTile(
-            leading: Icon(Icons.bluetooth, color: iconColor),
-            title: Text(
+  Widget _buildDeviceCard(BleDevice device) {
+    final deviceType = device.name.substring(4, 7);
+    final iconColor = deviceType == '678' ? Colors.blue : Colors.green;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      color: const Color(0xFF2A2D30),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: iconColor.withOpacity(0.2),
+          child: Icon(Icons.bluetooth, color: iconColor),
+        ),
+        title: Text(
+          _maskDeviceName(device.name),
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        subtitle: Text(
+          device.id,
+          style: TextStyle(color: Colors.white.withOpacity(0.7)),
+        ),
+        trailing: ElevatedButton(
+          onPressed: () {
+            context.read<MyDeviceBloc>().add(ConnectDeviceEvent(device));
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2691A5),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+          child: const Text('Connect'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConnectedDevice(BleDevice device) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+      color: const Color(0xFF2A2D30),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.bluetooth_connected, color: Colors.green),
+                SizedBox(width: 8),
+                Text(
+                  'Connected Device',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
               _maskDeviceName(device.name),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
-            subtitle: Text(
+            Text(
               device.id,
-              style: TextStyle(color: Colors.white.withOpacity(0.7)),
+              style:
+                  TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
             ),
-            trailing: ElevatedButton(
+            const SizedBox(height: 16),
+            ElevatedButton(
               onPressed: () {
-                context.read<MyDeviceBloc>().add(ConnectDeviceEvent(device));
+                context.read<MyDeviceBloc>().add(DisconnectDeviceEvent(device));
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2691A5),
+                backgroundColor: Colors.red,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20)),
               ),
-              child: const Text('Connect'),
+              child: const Text('Disconnect'),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

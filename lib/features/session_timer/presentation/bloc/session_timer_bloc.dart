@@ -11,63 +11,55 @@ class SessionTimerBloc extends Bloc<SessionTimerEvent, SessionTimerState> {
   final int initialDuration;
 
   SessionTimerBloc({required this.initialDuration})
-      : super(SessionTimerInitial()) {
+      : super(SessionTimerInitial(initialDuration)) {
     on<StartSession>(_onStartSession);
     on<PauseSession>(_onPauseSession);
     on<ResumeSession>(_onResumeSession);
-    on<StopSession>(_onStopSession);
-    on<RepeatSession>(_onRepeatSession);
-    on<_TimerTick>(_onTimerTick);
+    on<ResetSession>(_onResetSession);
+    on<TickSession>(_onTickSession);
   }
 
   void _onStartSession(StartSession event, Emitter<SessionTimerState> emit) {
-    emit(SessionTimerRunInProgress(event.duration));
-    _startTimer(event.duration);
+    emit(SessionTimerRunInProgress(initialDuration));
+    _startTimer();
   }
 
   void _onPauseSession(PauseSession event, Emitter<SessionTimerState> emit) {
     if (state is SessionTimerRunInProgress) {
       _timer?.cancel();
-      emit(SessionTimerRunPause((state as SessionTimerRunInProgress).duration));
+      emit(SessionTimerRunPause(state.duration));
     }
   }
 
   void _onResumeSession(ResumeSession event, Emitter<SessionTimerState> emit) {
     if (state is SessionTimerRunPause) {
-      emit(SessionTimerRunInProgress((state as SessionTimerRunPause).duration));
-      _startTimer((state as SessionTimerRunPause).duration);
+      emit(SessionTimerRunInProgress(state.duration));
+      _startTimer();
     }
   }
 
-  void _onStopSession(StopSession event, Emitter<SessionTimerState> emit) {
+  void _onResetSession(ResetSession event, Emitter<SessionTimerState> emit) {
     _timer?.cancel();
-    emit(SessionTimerRunComplete());
+    emit(SessionTimerInitial(initialDuration));
   }
 
-  void _onRepeatSession(RepeatSession event, Emitter<SessionTimerState> emit) {
-    emit(SessionTimerRunInProgress(Duration(seconds: initialDuration)));
-    _startTimer(Duration(seconds: initialDuration));
-  }
-
-  void _onTimerTick(_TimerTick event, Emitter<SessionTimerState> emit) {
+  void _onTickSession(TickSession event, Emitter<SessionTimerState> emit) {
     if (state is SessionTimerRunInProgress) {
-      final newDuration = (state as SessionTimerRunInProgress).duration -
-          const Duration(seconds: 1);
-      if (newDuration.inSeconds > 0) {
+      final newDuration = state.duration - 1;
+      if (newDuration > 0) {
         emit(SessionTimerRunInProgress(newDuration));
       } else {
         _timer?.cancel();
-        emit(SessionTimerRunComplete());
+        emit(const SessionTimerRunComplete());
       }
     }
   }
 
-  void _startTimer(Duration duration) {
+  void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(
-      const Duration(seconds: 1),
-      (timer) => add(_TimerTick()),
-    );
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      add(TickSession());
+    });
   }
 
   @override

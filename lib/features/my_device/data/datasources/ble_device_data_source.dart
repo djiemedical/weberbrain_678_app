@@ -9,11 +9,13 @@ abstract class BleDeviceDataSource {
   Future<bool> connectDevice(BleDevice device);
   Future<bool> disconnectDevice();
   Stream<BluetoothConnectionState> get connectionStateStream;
+  BleDevice? get connectedDevice;
 }
 
 class BleDeviceDataSourceImpl implements BleDeviceDataSource {
   final Logger _logger = Logger();
-  BluetoothDevice? _connectedDevice;
+  BluetoothDevice? _connectedBluetoothDevice;
+  BleDevice? _connectedBleDevice;
   bool _isScanning = false;
   StreamSubscription<List<ScanResult>>? _scanResultsSubscription;
 
@@ -27,7 +29,6 @@ class BleDeviceDataSourceImpl implements BleDeviceDataSource {
 
     try {
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-
       _scanResultsSubscription = FlutterBluePlus.scanResults.listen((results) {
         discoveredDevices = results
             .where((r) => r.device.platformName.startsWith('WEH'))
@@ -58,8 +59,10 @@ class BleDeviceDataSourceImpl implements BleDeviceDataSource {
     try {
       _logger
           .d('Attempting to connect to device: ${device.name} (${device.id})');
-      _connectedDevice = BluetoothDevice(remoteId: DeviceIdentifier(device.id));
-      await _connectedDevice!.connect();
+      _connectedBluetoothDevice =
+          BluetoothDevice(remoteId: DeviceIdentifier(device.id));
+      await _connectedBluetoothDevice!.connect();
+      _connectedBleDevice = device;
       _logger.i('Successfully connected to device: ${device.name}');
       return true;
     } catch (e) {
@@ -70,40 +73,32 @@ class BleDeviceDataSourceImpl implements BleDeviceDataSource {
 
   @override
   Future<bool> disconnectDevice() async {
-    if (_connectedDevice != null) {
+    if (_connectedBluetoothDevice != null) {
       try {
         _logger.d(
-            'Attempting to disconnect from device: ${_connectedDevice!.platformName}');
-        await _connectedDevice!.disconnect();
-        _logger.i(
-            'Successfully disconnected from device: ${_connectedDevice!.platformName}');
-        _connectedDevice = null;
+            'Attempting to disconnect from device: ${_connectedBluetoothDevice!.remoteId}');
+        await _connectedBluetoothDevice!.disconnect();
+        _logger.i('Successfully disconnected from device');
+        _connectedBluetoothDevice = null;
+        _connectedBleDevice = null;
         return true;
       } catch (e) {
-        _logger.e('Error disconnecting device: $e');
+        _logger.e('Error disconnecting from device: $e');
         return false;
       }
-    } else {
-      _logger.w('No device connected to disconnect');
-      return false;
     }
+    return false;
   }
 
   @override
   Stream<BluetoothConnectionState> get connectionStateStream {
-    if (_connectedDevice != null) {
-      _logger.d(
-          'Starting to listen to connection state for device: ${_connectedDevice!.platformName}');
-      return _connectedDevice!.connectionState.asBroadcastStream().map((state) {
-        _logger.d('Connection state changed: $state');
-        return state;
-      }).handleError((error) {
-        _logger.e('Error in connection state stream: $error');
-        return BluetoothConnectionState.disconnected;
-      });
+    if (_connectedBluetoothDevice != null) {
+      return _connectedBluetoothDevice!.connectionState;
     } else {
-      _logger.w('No device connected, returning disconnected state stream');
-      return Stream.value(BluetoothConnectionState.disconnected);
+      return const Stream.empty();
     }
   }
+
+  @override
+  BleDevice? get connectedDevice => _connectedBleDevice;
 }

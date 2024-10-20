@@ -58,16 +58,9 @@ abstract class _$AppRouter extends RootStackRouter {
       );
     },
     SessionTimerRoute.name: (routeData) {
-      final pathParams = routeData.inheritedPathParams;
-      final args = routeData.argsAs<SessionTimerRouteArgs>(
-          orElse: () => SessionTimerRouteArgs(
-              durationInSeconds: pathParams.getInt('durationInSeconds')));
       return AutoRoutePage<dynamic>(
         routeData: routeData,
-        child: SessionTimerPage(
-          key: args.key,
-          durationInSeconds: args.durationInSeconds,
-        ),
+        child: const SessionTimerPage(),
       );
     },
     SplashRoute.name: (routeData) {
@@ -179,41 +172,16 @@ class RegisterRoute extends PageRouteInfo<void> {
 
 /// generated route for
 /// [SessionTimerPage]
-class SessionTimerRoute extends PageRouteInfo<SessionTimerRouteArgs> {
-  SessionTimerRoute({
-    Key? key,
-    required int durationInSeconds,
-    List<PageRouteInfo>? children,
-  }) : super(
+class SessionTimerRoute extends PageRouteInfo<void> {
+  const SessionTimerRoute({List<PageRouteInfo>? children})
+      : super(
           SessionTimerRoute.name,
-          args: SessionTimerRouteArgs(
-            key: key,
-            durationInSeconds: durationInSeconds,
-          ),
-          rawPathParams: {'durationInSeconds': durationInSeconds},
           initialChildren: children,
         );
 
   static const String name = 'SessionTimerRoute';
 
-  static const PageInfo<SessionTimerRouteArgs> page =
-      PageInfo<SessionTimerRouteArgs>(name);
-}
-
-class SessionTimerRouteArgs {
-  const SessionTimerRouteArgs({
-    this.key,
-    required this.durationInSeconds,
-  });
-
-  final Key? key;
-
-  final int durationInSeconds;
-
-  @override
-  String toString() {
-    return 'SessionTimerRouteArgs{key: $key, durationInSeconds: $durationInSeconds}';
-  }
+  static const PageInfo<void> page = PageInfo<void>(name);
 }
 
 /// generated route for

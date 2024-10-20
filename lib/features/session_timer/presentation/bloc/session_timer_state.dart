@@ -1,31 +1,27 @@
-// lib/features/session_timer/presentation/bloc/session_timer_state.dart
+// Part file: session_timer_state.dart
 part of 'session_timer_bloc.dart';
 
 abstract class SessionTimerState extends Equatable {
-  const SessionTimerState();
+  final int duration;
 
-  @override
-  List<Object> get props => [];
-}
-
-class SessionTimerInitial extends SessionTimerState {}
-
-class SessionTimerRunInProgress extends SessionTimerState {
-  final Duration duration;
-
-  const SessionTimerRunInProgress(this.duration);
+  const SessionTimerState(this.duration);
 
   @override
   List<Object> get props => [duration];
+}
+
+class SessionTimerInitial extends SessionTimerState {
+  const SessionTimerInitial(super.duration);
+}
+
+class SessionTimerRunInProgress extends SessionTimerState {
+  const SessionTimerRunInProgress(super.duration);
 }
 
 class SessionTimerRunPause extends SessionTimerState {
-  final Duration duration;
-
-  const SessionTimerRunPause(this.duration);
-
-  @override
-  List<Object> get props => [duration];
+  const SessionTimerRunPause(super.duration);
 }
 
-class SessionTimerRunComplete extends SessionTimerState {}
+class SessionTimerRunComplete extends SessionTimerState {
+  const SessionTimerRunComplete() : super(0);
+}

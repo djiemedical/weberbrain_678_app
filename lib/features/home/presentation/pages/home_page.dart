@@ -5,11 +5,59 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../config/routes/app_router.dart';
 import '../../../my_device/presentation/bloc/my_device_bloc.dart';
-import '../widgets/default_settings_box.dart';
+import '../../../session_timer/presentation/bloc/background_session_bloc.dart';
+import '../../../settings/presentation/widgets/default_settings_box.dart';
 
 @RoutePage()
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  int _sessionDuration = 30; // Default duration in minutes
+
+  @override
+  void initState() {
+    super.initState();
+    context.read<MyDeviceBloc>().add(CheckConnectionStatusEvent());
+  }
+
+  void _showNoDeviceConnectedDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF2A2D30),
+          title: const Text('No Device Connected',
+              style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Please connect to a device before starting a session.',
+            style: TextStyle(color: Colors.white),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child:
+                  const Text('OK', style: TextStyle(color: Color(0xFF2691A5))),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            TextButton(
+              child: const Text('Connect Device',
+                  style: TextStyle(color: Color(0xFF2691A5))),
+              onPressed: () {
+                Navigator.of(context).pop();
+                context.router.push(const MyDeviceRoute());
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +106,7 @@ class HomePage extends StatelessWidget {
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
               // Handle logout action
+              context.router.replaceAll([const LoginRoute()]);
             },
           ),
         ],
@@ -75,23 +124,18 @@ class HomePage extends StatelessWidget {
                   children: [
                     BlocBuilder<MyDeviceBloc, MyDeviceState>(
                       builder: (context, state) {
-                        return Column(
-                          children: [
-                            Text(
-                              'Device Status: ${_getConnectionStatus(state)}',
+                        if (state is MyDeviceConnected) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(
+                              'Connected to: ${state.device.name}',
                               style: const TextStyle(
-                                  color: Colors.white, fontSize: 18),
+                                  color: Colors.white, fontSize: 16),
+                              textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 10),
-                            if (state is! MyDeviceConnected)
-                              ElevatedButton(
-                                onPressed: () {
-                                  context.router.push(const MyDeviceRoute());
-                                },
-                                child: const Text('My Device'),
-                              ),
-                          ],
-                        );
+                          );
+                        }
+                        return const SizedBox.shrink();
                       },
                     ),
                     const SizedBox(height: 20),
@@ -106,15 +150,35 @@ class HomePage extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
                     BlocBuilder<MyDeviceBloc, MyDeviceState>(
-                      builder: (context, state) {
-                        return DefaultSettingsBox(
-                          isDeviceConnected: state is MyDeviceConnected,
-                          onStartPressed: () {
-                            if (state is MyDeviceConnected) {
-                              context.router.push(SessionTimerRoute(
-                                  durationInSeconds:
-                                      30 * 60)); // 30 minutes in seconds
-                            }
+                      builder: (context, deviceState) {
+                        return BlocBuilder<BackgroundSessionBloc,
+                            BackgroundSessionState>(
+                          builder: (context, sessionState) {
+                            return DefaultSettingsBox(
+                              isDeviceConnected:
+                                  deviceState is MyDeviceConnected,
+                              onStartPressed: () {
+                                if (deviceState is MyDeviceConnected) {
+                                  final durationInSeconds =
+                                      _sessionDuration * 60;
+                                  if (!sessionState.isRunning) {
+                                    context.read<BackgroundSessionBloc>().add(
+                                          StartBackgroundSession(
+                                              durationInSeconds),
+                                        );
+                                  }
+                                  context.router
+                                      .push(const SessionTimerRoute());
+                                } else {
+                                  _showNoDeviceConnectedDialog();
+                                }
+                              },
+                              onDurationChanged: (int newDuration) {
+                                setState(() {
+                                  _sessionDuration = newDuration;
+                                });
+                              },
+                            );
                           },
                         );
                       },
@@ -145,15 +209,5 @@ class HomePage extends StatelessWidget {
         },
       ),
     );
-  }
-
-  String _getConnectionStatus(MyDeviceState state) {
-    if (state is MyDeviceConnected) {
-      return 'Connected';
-    } else if (state is MyDeviceConnecting) {
-      return 'Connecting...';
-    } else {
-      return 'Disconnected';
-    }
   }
 }
