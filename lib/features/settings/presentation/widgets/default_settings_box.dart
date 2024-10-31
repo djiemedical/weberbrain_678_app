@@ -6,9 +6,7 @@ import 'package:flash/flash.dart';
 import '../../../session_timer/presentation/bloc/background_session_bloc.dart';
 import '../../domain/usecases/get_regions.dart';
 import '../../domain/usecases/get_output_power.dart';
-import '../../domain/usecases/set_output_power.dart';
 import '../../domain/usecases/get_frequency.dart';
-import '../../domain/usecases/set_frequency.dart';
 import '../../../../config/routes/app_router.dart';
 import '../../../../core/di/injection_container.dart';
 import '../bloc/default_settings_state.dart';
@@ -39,7 +37,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     'Parietal': RegionSettings(outputPower: {}, frequency: 0),
     'Occipital': RegionSettings(outputPower: {}, frequency: 0),
   };
-  String _selectedRegion = 'All';
+  Set<String> _selectedRegions = {'All'};
 
   final Map<String, String> _regionMasks = {
     'Frontal': 'Front',
@@ -62,10 +60,12 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
 
     setState(() {
       regionsResult.fold(
-        (failure) => _selectedRegion = 'All',
+        (failure) {
+          _selectedRegions = {'All'};
+        },
         (regions) {
           if (regions.isNotEmpty) {
-            _selectedRegion = regions.first;
+            _selectedRegions = regions;
           }
         },
       );
@@ -168,15 +168,18 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                 return Column(
                   children: [
                     AppBar(
-                      title: const Text('Select Region',
+                      title: const Text('Select Regions',
                           style: TextStyle(color: Colors.white)),
                       backgroundColor: Colors.transparent,
                       elevation: 0,
                       automaticallyImplyLeading: false,
                       actions: [
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => Navigator.pop(context),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Done',
+                              style: TextStyle(color: Color(0xFF2691A5))),
                         ),
                       ],
                     ),
@@ -186,23 +189,38 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                         itemCount: regions.length,
                         itemBuilder: (context, index) {
                           final region = regions[index];
-                          return RadioListTile<String>(
+                          return CheckboxListTile(
                             title: Text(region,
                                 style: const TextStyle(color: Colors.white)),
                             subtitle: region != 'All'
                                 ? Text(_regionMasks[region]!,
                                     style: const TextStyle(color: Colors.grey))
                                 : null,
-                            value: region,
-                            groupValue: _selectedRegion,
-                            onChanged: (String? value) {
+                            value: _selectedRegions.contains(region),
+                            onChanged: (bool? value) {
                               setModalState(() {
-                                _selectedRegion = value!;
+                                if (region == 'All') {
+                                  if (value == true) {
+                                    _selectedRegions = {'All'};
+                                  } else {
+                                    _selectedRegions.clear();
+                                  }
+                                } else {
+                                  if (value == true) {
+                                    _selectedRegions.remove('All');
+                                    _selectedRegions.add(region);
+                                  } else {
+                                    _selectedRegions.remove(region);
+                                    if (_selectedRegions.isEmpty) {
+                                      _selectedRegions.add('All');
+                                    }
+                                  }
+                                }
                               });
                               setState(() {});
-                              Navigator.pop(context);
                             },
                             activeColor: const Color(0xFF2691A5),
+                            checkColor: Colors.white,
                           );
                         },
                       ),
@@ -217,9 +235,25 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     );
   }
 
+  void _updateFrequencyForAllSelectedRegions(int frequency) {
+    final regions = _selectedRegions.contains('All')
+        ? _regionSettings.keys.toSet()
+        : _selectedRegions;
+
+    for (final region in regions) {
+      _regionSettings[region]!.frequency = frequency;
+    }
+  }
+
   void _showOutputPowerSelector() {
     int allPower = 0;
     bool isAllControlled = false;
+
+    // Get the first selected region's power settings as reference
+    final referenceRegion =
+        _selectedRegions.contains('All') ? 'All' : _selectedRegions.first;
+    Map<String, int> currentPower =
+        Map.from(_regionSettings[referenceRegion]!.outputPower);
 
     showModalBottomSheet(
       context: context,
@@ -235,8 +269,10 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
               child: Column(
                 children: [
                   AppBar(
-                    title: const Text('Set Output Power',
-                        style: TextStyle(color: Colors.white)),
+                    title: Text(
+                      'Set Power (${_getDisplayRegions()})',
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     backgroundColor: Colors.transparent,
                     elevation: 0,
                     automaticallyImplyLeading: false,
@@ -257,38 +293,42 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                             setModalState(() {
                               allPower = value.round();
                               isAllControlled = true;
-                              _regionSettings[_selectedRegion]!
-                                  .outputPower
-                                  .updateAll((key, _) => allPower);
+                              currentPower.updateAll((key, _) => allPower);
+                              for (var region
+                                  in _selectedRegions.contains('All')
+                                      ? _regionSettings.keys
+                                      : _selectedRegions) {
+                                _regionSettings[region]!
+                                    .outputPower
+                                    .updateAll((key, _) => allPower);
+                              }
                             });
                             setState(() {});
-                            getIt<SetOutputPower>()(Map<String, int>.from(
-                                _regionSettings[_selectedRegion]!.outputPower));
                           },
                         ),
                         const Divider(color: Colors.grey),
-                        ..._regionSettings[_selectedRegion]!
-                            .outputPower
-                            .entries
-                            .map((entry) {
+                        ...currentPower.entries.map((entry) {
                           final wavelength = entry.key;
-                          final power = entry.value;
                           return _buildPowerSlider(
                             wavelength,
-                            power,
+                            _regionSettings[referenceRegion]!
+                                .outputPower[wavelength]!,
                             (value) {
                               setModalState(() {
-                                _regionSettings[_selectedRegion]!
-                                    .outputPower[wavelength] = value.round();
                                 if (isAllControlled) {
                                   isAllControlled = false;
                                   allPower = 0;
                                 }
+                                final newPower = value.round();
+                                for (var region
+                                    in _selectedRegions.contains('All')
+                                        ? _regionSettings.keys
+                                        : _selectedRegions) {
+                                  _regionSettings[region]!
+                                      .outputPower[wavelength] = newPower;
+                                }
                               });
                               setState(() {});
-                              getIt<SetOutputPower>()(Map<String, int>.from(
-                                  _regionSettings[_selectedRegion]!
-                                      .outputPower));
                             },
                           );
                         }),
@@ -338,6 +378,10 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
   }
 
   void _showFrequencySelector() {
+    final referenceRegion =
+        _selectedRegions.contains('All') ? 'All' : _selectedRegions.first;
+    int currentFrequency = _regionSettings[referenceRegion]!.frequency;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF2A2D30),
@@ -352,8 +396,10 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
               child: Column(
                 children: [
                   AppBar(
-                    title: const Text('Set Frequency',
-                        style: TextStyle(color: Colors.white)),
+                    title: Text(
+                      'Set Frequency (${_getDisplayRegions()})',
+                      style: const TextStyle(color: Colors.white),
+                    ),
                     backgroundColor: Colors.transparent,
                     elevation: 0,
                     automaticallyImplyLeading: false,
@@ -365,30 +411,27 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                     ],
                   ),
                   Slider(
-                    value:
-                        _regionSettings[_selectedRegion]!.frequency.toDouble(),
+                    value: currentFrequency.toDouble(),
                     min: 0,
                     max: 1200,
                     divisions: 120,
-                    label: '${_regionSettings[_selectedRegion]!.frequency} Hz',
+                    label: '$currentFrequency Hz',
                     onChanged: (double value) {
                       setModalState(() {
                         if (value <= 250) {
-                          _regionSettings[_selectedRegion]!.frequency =
-                              (value / 10).round() * 10;
+                          currentFrequency = (value / 10).round() * 10;
                         } else {
-                          _regionSettings[_selectedRegion]!.frequency =
+                          currentFrequency =
                               ((value - 250) / 50).round() * 50 + 250;
                         }
+                        _updateFrequencyForAllSelectedRegions(currentFrequency);
                       });
                       setState(() {});
-                      getIt<SetFrequency>()
-                          .call(_regionSettings[_selectedRegion]!.frequency);
                     },
                     activeColor: const Color(0xFF2691A5),
                     inactiveColor: Colors.grey,
                   ),
-                  Text('${_regionSettings[_selectedRegion]!.frequency} Hz',
+                  Text('$currentFrequency Hz',
                       style: const TextStyle(color: Colors.white)),
                   const SizedBox(height: 20),
                   Wrap(
@@ -400,12 +443,11 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                       return ElevatedButton(
                         onPressed: () {
                           setModalState(() {
-                            _regionSettings[_selectedRegion]!.frequency =
-                                preset;
+                            currentFrequency = preset;
+                            _updateFrequencyForAllSelectedRegions(
+                                currentFrequency);
                           });
                           setState(() {});
-                          getIt<SetFrequency>().call(
-                              _regionSettings[_selectedRegion]!.frequency);
                         },
                         style: ElevatedButton.styleFrom(
                           foregroundColor: Colors.white,
@@ -425,10 +467,13 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
   }
 
   String _getDisplayRegions() {
-    if (_selectedRegion == 'All') {
+    if (_selectedRegions.contains('All')) {
       return 'All';
     }
-    return _selectedRegion;
+    if (_selectedRegions.length <= 2) {
+      return _selectedRegions.join(', ');
+    }
+    return '${_selectedRegions.length} regions';
   }
 
   void _showConnectToast(BuildContext context) {
@@ -565,7 +610,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                             Expanded(
                               child: SettingItem(
                                 label: 'Wavelength & Power',
-                                values: _regionSettings[_selectedRegion]!
+                                values: _regionSettings[_selectedRegions.first]!
                                     .outputPower
                                     .entries
                                     .map((e) => '${e.key}: ${e.value}%')
@@ -577,7 +622,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                               child: SettingItem(
                                 label: 'Frequency',
                                 values: [
-                                  '${_regionSettings[_selectedRegion]!.frequency} Hz'
+                                  '${_regionSettings[_selectedRegions.first]!.frequency} Hz'
                                 ],
                                 onTap: _showFrequencySelector,
                               ),

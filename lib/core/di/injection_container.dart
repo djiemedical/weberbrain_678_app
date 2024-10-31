@@ -2,6 +2,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+export 'package:get_it/get_it.dart' show GetIt;
 
 // Feature: Splash
 import '../../features/splash/data/repositories/splash_repository_impl.dart';
@@ -49,6 +50,12 @@ import '../../features/settings/domain/usecases/get_output_power.dart';
 import '../../features/settings/domain/usecases/set_output_power.dart';
 import '../../features/settings/domain/usecases/get_frequency.dart';
 import '../../features/settings/domain/usecases/set_frequency.dart';
+
+// Feature: Power Monitoring
+import '../../features/power_monitoring/data/datasources/power_monitoring_data_source.dart';
+import '../../features/power_monitoring/data/repositories/power_monitoring_repository_impl.dart';
+import '../../features/power_monitoring/domain/repositories/power_monitoring_repository.dart';
+import '../../features/power_monitoring/presentation/bloc/power_monitoring_bloc.dart';
 
 final getIt = GetIt.instance;
 
@@ -137,4 +144,23 @@ Future<void> init() async {
   getIt.registerLazySingleton(() => SetOutputPower(getIt()));
   getIt.registerLazySingleton(() => GetFrequency(getIt()));
   getIt.registerLazySingleton(() => SetFrequency(getIt()));
+
+  // Power Monitoring Feature
+  getIt.registerLazySingleton<PowerMonitoringDataSource>(
+    () => PowerMonitoringDataSourceImpl(
+      deviceBloc: getIt<MyDeviceBloc>(),
+    ),
+  );
+
+  getIt.registerLazySingleton<PowerMonitoringRepository>(
+    () => PowerMonitoringRepositoryImpl(
+      dataSource: getIt<PowerMonitoringDataSource>(),
+    ),
+  );
+
+  getIt.registerFactory(
+    () => PowerMonitoringBloc(
+      repository: getIt<PowerMonitoringRepository>(),
+    ),
+  );
 }

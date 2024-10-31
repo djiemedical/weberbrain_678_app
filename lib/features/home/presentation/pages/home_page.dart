@@ -4,9 +4,13 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../config/routes/app_router.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../my_device/presentation/bloc/my_device_bloc.dart';
 import '../../../session_timer/presentation/bloc/background_session_bloc.dart';
 import '../../../settings/presentation/widgets/default_settings_box.dart';
+import '../../../power_monitoring/presentation/widgets/power_monitoring_display.dart';
+import '../../../power_monitoring/presentation/bloc/power_monitoring_bloc.dart';
+import '../../../power_monitoring/presentation/bloc/power_monitoring_event.dart';
 
 @RoutePage()
 class HomePage extends StatefulWidget {
@@ -105,7 +109,6 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              // Handle logout action
               context.router.replaceAll([const LoginRoute()]);
             },
           ),
@@ -181,6 +184,19 @@ class _HomePageState extends State<HomePage> {
                             );
                           },
                         );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    BlocBuilder<MyDeviceBloc, MyDeviceState>(
+                      builder: (context, state) {
+                        if (state is MyDeviceConnected) {
+                          return BlocProvider<PowerMonitoringBloc>(
+                            create: (context) => getIt<PowerMonitoringBloc>()
+                              ..add(const StartPowerMonitoring()),
+                            child: const PowerMonitoringDisplay(),
+                          );
+                        }
+                        return const SizedBox.shrink();
                       },
                     ),
                   ],

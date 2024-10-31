@@ -15,3 +15,8 @@ class CacheFailure extends Failure {}
 class NetworkFailure extends Failure {}
 
 class BluetoothFailure extends Failure {}
+
+class DeviceFailure extends Failure {
+  @override
+  List<Object> get props => [];
+}
