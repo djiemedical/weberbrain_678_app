@@ -27,7 +27,7 @@ class SplashRepositoryImpl implements SplashRepository {
   Future<bool> isUserLoggedIn() async {
     try {
       String? userToken = sharedPreferences.getString('user_token');
-      return userToken != null && userToken.isNotEmpty;
+      return userToken?.isNotEmpty ?? false;
     } catch (e) {
       logger.e('Error checking user login status: $e');
       return false; // Assume user is not logged in if there's an error

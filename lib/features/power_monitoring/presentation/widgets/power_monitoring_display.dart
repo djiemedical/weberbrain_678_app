@@ -60,7 +60,11 @@ class PowerMonitorBox extends StatelessWidget {
 
         if (state is PowerMonitoringLoaded) {
           value = isInput ? state.inputPower : state.outputPower;
-          data = isInput ? state.inputHistory : state.outputHistory;
+
+          // Create a new list to ensure widget update
+          data = isInput
+              ? List<double>.from(state.inputHistory)
+              : List<double>.from(state.outputHistory);
         }
 
         return Container(
