@@ -2,16 +2,14 @@
 import 'package:equatable/equatable.dart';
 
 class PowerData extends Equatable {
-  final double inputPower;
-  final double outputPower;
+  final Map<String, double> powerLevels;
   final DateTime timestamp;
 
   const PowerData({
-    required this.inputPower,
-    required this.outputPower,
+    required this.powerLevels,
     required this.timestamp,
   });
 
   @override
-  List<Object> get props => [inputPower, outputPower, timestamp];
+  List<Object> get props => [powerLevels, timestamp];
 }

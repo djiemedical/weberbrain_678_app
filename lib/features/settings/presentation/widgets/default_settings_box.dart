@@ -15,12 +15,16 @@ class DefaultSettingsBox extends StatefulWidget {
   final bool isDeviceConnected;
   final VoidCallback onStartPressed;
   final Function(int) onDurationChanged;
+  final double maxHeight;
+  final double? maxWidth;
 
   const DefaultSettingsBox({
     super.key,
     required this.isDeviceConnected,
     required this.onStartPressed,
     required this.onDurationChanged,
+    required this.maxHeight,
+    this.maxWidth,
   });
 
   @override
@@ -249,7 +253,6 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     int allPower = 0;
     bool isAllControlled = false;
 
-    // Get the first selected region's power settings as reference
     final referenceRegion =
         _selectedRegions.contains('All') ? 'All' : _selectedRegions.first;
     Map<String, int> currentPower =
@@ -470,7 +473,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     if (_selectedRegions.contains('All')) {
       return 'All';
     }
-    if (_selectedRegions.length <= 2) {
+    if (_selectedRegions.length <= 3) {
       return _selectedRegions.join(', ');
     }
     return '${_selectedRegions.length} regions';
@@ -512,130 +515,116 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
   Widget build(BuildContext context) {
     return BlocBuilder<BackgroundSessionBloc, BackgroundSessionState>(
       builder: (context, state) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final buttonWidth = constraints.maxWidth * 0.9;
-            return SizedBox(
-              width: buttonWidth,
-              child: Column(
-                children: [
-                  Container(
-                    width: buttonWidth,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2A2D30),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.2), width: 1),
-                    ),
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        ElevatedButton(
-                          onPressed:
-                              widget.isDeviceConnected && !state.isRunning
-                                  ? () {
-                                      if (state.remainingDuration > 0) {
-                                        context
-                                            .read<BackgroundSessionBloc>()
-                                            .add(ResumeBackgroundSession());
-                                      } else {
-                                        widget.onStartPressed();
-                                      }
-                                      context.router
-                                          .push(const SessionTimerRoute());
-                                    }
-                                  : widget.isDeviceConnected
-                                      ? null
-                                      : () => _showConnectToast(context),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                widget.isDeviceConnected && !state.isRunning
-                                    ? const Color(0xFF2691A5)
-                                    : Colors.grey,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10)),
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 15, horizontal: 80),
-                          ),
-                          child: Text(
-                            state.isRunning
-                                ? 'In Session'
-                                : (state.remainingDuration > 0
-                                    ? 'Resume'
-                                    : 'Start'),
-                            style: const TextStyle(
-                                fontSize: 24, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        GestureDetector(
-                          onTap: state.isRunning || state.remainingDuration > 0
-                              ? () =>
-                                  context.router.push(const SessionTimerRoute())
-                              : _showDurationPicker,
-                          child: Column(
-                            children: [
-                              Text(
-                                state.isRunning || state.remainingDuration > 0
-                                    ? 'Remaining Time'
-                                    : 'Duration',
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 16),
-                              ),
-                              Text(
-                                state.isRunning || state.remainingDuration > 0
-                                    ? _formatDuration(state.remainingDuration)
-                                    : '$_duration mins',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: SettingItem(
-                                label: 'Region',
-                                values: [_getDisplayRegions()],
-                                onTap: _showRegionSelector,
-                              ),
-                            ),
-                            Expanded(
-                              child: SettingItem(
-                                label: 'Wavelength & Power',
-                                values: _regionSettings[_selectedRegions.first]!
-                                    .outputPower
-                                    .entries
-                                    .map((e) => '${e.key}: ${e.value}%')
-                                    .toList(),
-                                onTap: _showOutputPowerSelector,
-                              ),
-                            ),
-                            Expanded(
-                              child: SettingItem(
-                                label: 'Frequency',
-                                values: [
-                                  '${_regionSettings[_selectedRegions.first]!.frequency} Hz'
-                                ],
-                                onTap: _showFrequencySelector,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+        return SizedBox(
+          width: widget.maxWidth,
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFF2A2D30),
+              borderRadius: BorderRadius.circular(20),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton(
+                  onPressed: widget.isDeviceConnected && !state.isRunning
+                      ? () {
+                          if (state.remainingDuration > 0) {
+                            context
+                                .read<BackgroundSessionBloc>()
+                                .add(ResumeBackgroundSession());
+                          } else {
+                            widget.onStartPressed();
+                          }
+                          context.router.push(const SessionTimerRoute());
+                        }
+                      : widget.isDeviceConnected
+                          ? null
+                          : () => _showConnectToast(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        widget.isDeviceConnected && !state.isRunning
+                            ? const Color(0xFF2691A5)
+                            : Colors.grey,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 15, horizontal: 80),
                   ),
-                ],
-              ),
-            );
-          },
+                  child: Text(
+                    state.isRunning
+                        ? 'In Session'
+                        : (state.remainingDuration > 0 ? 'Resume' : 'Start'),
+                    style: const TextStyle(fontSize: 24, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: state.isRunning || state.remainingDuration > 0
+                      ? () => context.router.push(const SessionTimerRoute())
+                      : _showDurationPicker,
+                  child: Column(
+                    children: [
+                      Text(
+                        state.isRunning || state.remainingDuration > 0
+                            ? 'Remaining Time'
+                            : 'Duration',
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 20),
+                      ),
+                      Text(
+                        state.isRunning || state.remainingDuration > 0
+                            ? _formatDuration(state.remainingDuration)
+                            : '$_duration mins',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SettingItem(
+                        label: 'Region',
+                        values: [_getDisplayRegions()],
+                        onTap: _showRegionSelector,
+                      ),
+                    ),
+                    Expanded(
+                      child: SettingItem(
+                        label: 'Power',
+                        values: _regionSettings[_selectedRegions.first]!
+                            .outputPower
+                            .entries
+                            .map((e) => '${e.key}: ${e.value}%')
+                            .toList(),
+                        onTap: _showOutputPowerSelector,
+                      ),
+                    ),
+                    Expanded(
+                      child: SettingItem(
+                        label: 'Frequency',
+                        values: [
+                          '${_regionSettings[_selectedRegions.first]!.frequency} Hz'
+                        ],
+                        onTap: _showFrequencySelector,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
@@ -670,7 +659,7 @@ class SettingItem extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
+            style: const TextStyle(color: Colors.grey, fontSize: 20),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 4),
@@ -678,7 +667,7 @@ class SettingItem extends StatelessWidget {
                 value,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 14,
+                  fontSize: 17,
                   fontWeight: FontWeight.bold,
                 ),
                 textAlign: TextAlign.center,

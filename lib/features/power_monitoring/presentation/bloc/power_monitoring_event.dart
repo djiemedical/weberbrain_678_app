@@ -5,13 +5,22 @@ abstract class PowerMonitoringEvent extends Equatable {
   const PowerMonitoringEvent();
 
   @override
-  List<Object> get props => [];
+  List<Object?> get props => [];
 }
 
-class StartPowerMonitoring extends PowerMonitoringEvent {
-  const StartPowerMonitoring();
+class PowerMonitoringStarted extends PowerMonitoringEvent {
+  const PowerMonitoringStarted();
 }
 
-class StopPowerMonitoring extends PowerMonitoringEvent {
-  const StopPowerMonitoring();
+class PowerMonitoringUpdated extends PowerMonitoringEvent {
+  final Map<String, double> powerLevels;
+
+  const PowerMonitoringUpdated(this.powerLevels);
+
+  @override
+  List<Object?> get props => [powerLevels];
+}
+
+class PowerMonitoringStopped extends PowerMonitoringEvent {
+  const PowerMonitoringStopped();
 }

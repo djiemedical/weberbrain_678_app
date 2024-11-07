@@ -1,9 +1,9 @@
 // lib/features/power_monitoring/presentation/bloc/power_monitoring_bloc.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:dartz/dartz.dart';
-import '../../domain/entities/power_data.dart';
 import '../../domain/repositories/power_monitoring_repository.dart';
 import '../../../../core/error/failures.dart';
+import '../../domain/entities/power_data.dart';
 import 'power_monitoring_event.dart';
 import 'power_monitoring_state.dart';
 
@@ -13,53 +13,46 @@ class PowerMonitoringBloc
 
   PowerMonitoringBloc({required this.repository})
       : super(PowerMonitoringInitial()) {
-    on<StartPowerMonitoring>(_onStartPowerMonitoring);
-    on<StopPowerMonitoring>(_onStopPowerMonitoring);
+    on<PowerMonitoringStarted>(_onStarted);
+    on<PowerMonitoringUpdated>(_onUpdated);
+    on<PowerMonitoringStopped>(_onStopped);
   }
 
-  Future<void> _onStartPowerMonitoring(
-    StartPowerMonitoring event,
+  Future<void> _onStarted(
+    PowerMonitoringStarted event,
     Emitter<PowerMonitoringState> emit,
   ) async {
     emit(PowerMonitoringLoading());
-
     try {
       await emit.forEach<Either<Failure, PowerData>>(
         repository.getPowerData(),
         onData: (result) => result.fold(
-          (failure) => PowerMonitoringError(),
-          (powerData) {
-            if (state is PowerMonitoringLoaded) {
-              final currentState = state as PowerMonitoringLoaded;
-              return PowerMonitoringLoaded(
-                inputPower: powerData.inputPower,
-                outputPower: powerData.outputPower,
-                inputHistory: List<double>.from(
-                        [...currentState.inputHistory, powerData.inputPower])
-                    .take(20)
-                    .toList(),
-                outputHistory: List<double>.from(
-                        [...currentState.outputHistory, powerData.outputPower])
-                    .take(20)
-                    .toList(),
-              );
-            }
-            return PowerMonitoringLoaded(
-              inputPower: powerData.inputPower,
-              outputPower: powerData.outputPower,
-              inputHistory: [powerData.inputPower],
-              outputHistory: [powerData.outputPower],
-            );
-          },
+          (failure) => PowerMonitoringError(failure.toString()),
+          (powerData) => PowerMonitoringLoaded(
+            powerLevels: {
+              '650nm': powerData.powerLevels['650nm'] ?? 0.0,
+              '808nm': powerData.powerLevels['808nm'] ?? 0.0,
+              '1064nm': powerData.powerLevels['1064nm'] ?? 0.0,
+            },
+          ),
         ),
       );
     } catch (e) {
-      emit(PowerMonitoringError());
+      emit(PowerMonitoringError(e.toString()));
     }
   }
 
-  void _onStopPowerMonitoring(
-    StopPowerMonitoring event,
+  void _onUpdated(
+    PowerMonitoringUpdated event,
+    Emitter<PowerMonitoringState> emit,
+  ) {
+    if (state is PowerMonitoringLoaded) {
+      emit(PowerMonitoringLoaded(powerLevels: event.powerLevels));
+    }
+  }
+
+  void _onStopped(
+    PowerMonitoringStopped event,
     Emitter<PowerMonitoringState> emit,
   ) {
     emit(PowerMonitoringInitial());
