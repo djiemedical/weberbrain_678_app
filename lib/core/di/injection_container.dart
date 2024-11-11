@@ -4,6 +4,16 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 export 'package:get_it/get_it.dart' show GetIt;
 
+// Core
+import '../services/ble/infrastructure/ble_service.dart';
+import '../services/ble/infrastructure/flutter_blue_service.dart';
+import '../services/ble/domain/repositories/ble_repository.dart';
+import '../services/ble/data/repositories/ble_repository_impl.dart';
+import '../services/ble/domain/usecases/scan_devices.dart' as core_ble;
+import '../services/ble/domain/usecases/connect_device.dart' as core_ble;
+import '../services/ble/domain/usecases/disconnect_device.dart' as core_ble;
+import '../services/ble/domain/usecases/set_parameters.dart';
+
 // Feature: Splash
 import '../../features/splash/data/repositories/splash_repository_impl.dart';
 import '../../features/splash/domain/repositories/splash_repository.dart';
@@ -27,7 +37,6 @@ import '../../features/journal/domain/usecases/add_journal.dart';
 import '../../features/journal/presentation/bloc/journal_bloc.dart';
 
 // Feature: My Device
-import '../../features/my_device/data/datasources/ble_device_data_source.dart';
 import '../../features/my_device/data/repositories/my_device_repository_impl.dart';
 import '../../features/my_device/domain/repositories/my_device_repository.dart';
 import '../../features/my_device/domain/usecases/scan_devices.dart';
@@ -64,6 +73,20 @@ Future<void> init() async {
   final sharedPreferences = await SharedPreferences.getInstance();
   getIt.registerLazySingleton(() => sharedPreferences);
   getIt.registerLazySingleton(() => http.Client());
+
+  //! Core Services
+  // Core Services - BLE
+  getIt.registerLazySingleton<BleService>(() => FlutterBlueService());
+
+  getIt.registerLazySingleton<BleRepository>(
+    () => BleRepositoryImpl(bleService: getIt()),
+  );
+
+  // Core BLE Use Cases
+  getIt.registerLazySingleton(() => core_ble.ScanDevices(getIt()));
+  getIt.registerLazySingleton(() => core_ble.ConnectDevice(getIt()));
+  getIt.registerLazySingleton(() => core_ble.DisconnectDevice(getIt()));
+  getIt.registerLazySingleton(() => SetParameters(getIt()));
 
   //! Features
 
@@ -108,11 +131,8 @@ Future<void> init() async {
   );
 
   // My Device
-  getIt.registerLazySingleton<BleDeviceDataSource>(
-    () => BleDeviceDataSourceImpl(),
-  );
   getIt.registerLazySingleton<MyDeviceRepository>(
-    () => MyDeviceRepositoryImpl(dataSource: getIt<BleDeviceDataSource>()),
+    () => MyDeviceRepositoryImpl(bleRepository: getIt()),
   );
   getIt.registerLazySingleton(() => ScanDevices(getIt()));
   getIt.registerLazySingleton(() => ConnectDevice(getIt()));
@@ -122,7 +142,6 @@ Future<void> init() async {
       scanDevices: getIt(),
       connectDevice: getIt(),
       disconnectDevice: getIt(),
-      dataSource: getIt<BleDeviceDataSource>(),
     ),
   );
 
@@ -145,19 +164,17 @@ Future<void> init() async {
   getIt.registerLazySingleton(() => GetFrequency(getIt()));
   getIt.registerLazySingleton(() => SetFrequency(getIt()));
 
-  // Power Monitoring Feature
+  // Power Monitoring
   getIt.registerLazySingleton<PowerMonitoringDataSource>(
     () => PowerMonitoringDataSourceImpl(
       deviceBloc: getIt<MyDeviceBloc>(),
     ),
   );
-
   getIt.registerLazySingleton<PowerMonitoringRepository>(
     () => PowerMonitoringRepositoryImpl(
       dataSource: getIt<PowerMonitoringDataSource>(),
     ),
   );
-
   getIt.registerFactory(
     () => PowerMonitoringBloc(
       repository: getIt<PowerMonitoringRepository>(),

@@ -35,6 +35,7 @@ class BleDeviceDataSourceImpl implements BleDeviceDataSource {
             .map((r) => BleDevice(
                   id: r.device.remoteId.str,
                   name: r.device.platformName,
+                  rssi: r.rssi,
                 ))
             .toList();
         _logger.d('Found ${discoveredDevices.length} WEH devices');

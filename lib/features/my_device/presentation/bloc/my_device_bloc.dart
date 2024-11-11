@@ -6,7 +6,6 @@ import '../../domain/usecases/connect_device.dart';
 import '../../domain/usecases/disconnect_device.dart';
 import '../../../../core/usecases/usecase.dart';
 import '../../domain/entities/ble_device.dart';
-import '../../data/datasources/ble_device_data_source.dart';
 import 'package:logger/logger.dart';
 
 part 'my_device_event.dart';
@@ -16,14 +15,12 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
   final ScanDevices scanDevices;
   final ConnectDevice connectDevice;
   final DisconnectDevice disconnectDevice;
-  final BleDeviceDataSource dataSource;
   final Logger _logger = Logger();
 
   MyDeviceBloc({
     required this.scanDevices,
     required this.connectDevice,
     required this.disconnectDevice,
-    required this.dataSource,
   }) : super(MyDeviceInitial()) {
     on<ScanDevicesEvent>(_onScanDevices);
     on<ConnectDeviceEvent>(_onConnectDevice);
@@ -44,12 +41,7 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
       },
       (devices) {
         _logger.d('Scan completed. Found ${devices.length} devices');
-        final connectedDevice = dataSource.connectedDevice;
-        if (connectedDevice != null) {
-          emit(MyDeviceConnected(connectedDevice));
-        } else {
-          emit(MyDeviceScanned(devices));
-        }
+        emit(MyDeviceScanned(devices));
       },
     );
   }
@@ -94,11 +86,6 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
 
   void _onCheckConnectionStatus(
       CheckConnectionStatusEvent event, Emitter<MyDeviceState> emit) {
-    final connectedDevice = dataSource.connectedDevice;
-    if (connectedDevice != null) {
-      emit(MyDeviceConnected(connectedDevice));
-    } else {
-      emit(MyDeviceInitial());
-    }
+    emit(MyDeviceInitial());
   }
 }
