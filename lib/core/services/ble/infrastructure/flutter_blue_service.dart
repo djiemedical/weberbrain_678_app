@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:logger/logger.dart';
 import 'ble_service.dart';
+import 'ble_constants.dart';
 import '../domain/entities/ble_device.dart';
 
 class FlutterBlueService implements BleService {
@@ -118,15 +119,14 @@ class FlutterBlueService implements BleService {
         .where((r) =>
                 r.device.platformName.isNotEmpty &&
                 r.device.platformName.startsWith('WEH_678') &&
-                r.rssi >= -80 // Filter out devices with weak signal
+                r.rssi >= -90 // Filter out devices with weak signal
             )
         .map((r) => BleDevice(
               id: r.device.remoteId.str,
               name: r.device.platformName,
               rssi: r.rssi,
               advertisementData: {
-                'localName':
-                    r.advertisementData.advName, // Updated from localName
+                'localName': r.advertisementData.advName,
                 'txPowerLevel': r.advertisementData.txPowerLevel,
                 'serviceUuids': r.advertisementData.serviceUuids,
               },
@@ -144,35 +144,24 @@ class FlutterBlueService implements BleService {
       _logger
           .d('Attempting to connect to device: ${device.name} (${device.id})');
 
-      // Disconnect from any existing device first
-      await disconnectDevice();
-
+      // Create BluetoothDevice instance first
       _connectedDevice = BluetoothDevice(remoteId: DeviceIdentifier(device.id));
 
-      // Set up connection state monitoring
-      _connectionStateSubscription?.cancel();
-      _connectionStateSubscription = _connectedDevice!.connectionState.listen(
-        (state) {
-          _logger.d('Connection state changed: $state');
-          if (state == BluetoothConnectionState.disconnected) {
-            _handleDisconnection();
-          }
-        },
-        onError: (error) {
-          _logger.e('Connection state error: $error');
-          _handleDisconnection();
-        },
-        onDone: () {
-          _logger.d('Connection state subscription ended');
-          _handleDisconnection();
-        },
-      );
-
-      // Connect to device
+      // Then attempt connection
       await _connectedDevice!.connect(
         timeout: const Duration(seconds: 15),
         autoConnect: false,
       );
+
+      // Set up connection state monitoring
+      _connectionStateSubscription?.cancel();
+      _connectionStateSubscription =
+          _connectedDevice!.connectionState.listen((state) {
+        _logger.d('Connection state changed: $state');
+        if (state == BluetoothConnectionState.disconnected) {
+          _handleDisconnection();
+        }
+      });
 
       _connectedBleDevice = device;
       _logger.i('Successfully connected to device: ${device.name}');
@@ -185,10 +174,11 @@ class FlutterBlueService implements BleService {
   }
 
   void _handleDisconnection() {
-    _connectedDevice = null;
-    _connectedBleDevice = null;
+    _logger.d('Handling disconnection');
     _connectionStateSubscription?.cancel();
     _connectionStateSubscription = null;
+    _connectedDevice = null;
+    _connectedBleDevice = null;
   }
 
   @override
@@ -222,25 +212,60 @@ class FlutterBlueService implements BleService {
   }
 
   @override
+  Future<bool> writeCommand(List<int> value) async {
+    try {
+      final String command = String.fromCharCodes(value);
+      _logger.i('Writing command to device: $command');
+      return writeCharacteristic(
+          BleConstants.serviceUuid, BleConstants.characteristicUuid, value);
+    } catch (e) {
+      _logger.e('Error in writeCommand: $e');
+      return false;
+    }
+  }
+
+  @override
   Future<bool> writeCharacteristic(
       String serviceUuid, String characteristicUuid, List<int> value) async {
-    if (_connectedDevice == null) return false;
+    if (_connectedDevice == null) {
+      _logger.e('No device connected');
+      return false;
+    }
 
     try {
+      _logger.d('Discovering services...');
       final services = await _connectedDevice!.discoverServices();
-      final service = services.firstWhere(
-        (s) => s.uuid.toString() == serviceUuid,
-        orElse: () => throw Exception('Service not found: $serviceUuid'),
-      );
+      _logger.d('Found ${services.length} services');
 
-      final characteristic = service.characteristics.firstWhere(
-        (c) => c.uuid.toString() == characteristicUuid,
-        orElse: () =>
-            throw Exception('Characteristic not found: $characteristicUuid'),
-      );
+      for (var service in services) {
+        if (service.uuid.toString().toUpperCase() ==
+            serviceUuid.toUpperCase()) {
+          _logger.d('Found matching service: ${service.uuid}');
 
-      await characteristic.write(value);
-      return true;
+          for (var characteristic in service.characteristics) {
+            if (characteristic.uuid.toString().toUpperCase() ==
+                characteristicUuid.toUpperCase()) {
+              _logger
+                  .d('Found matching characteristic: ${characteristic.uuid}');
+
+              final String command = String.fromCharCodes(value);
+              _logger.i('Writing to characteristic:');
+              _logger.i('  Service UUID: $serviceUuid');
+              _logger.i('  Characteristic UUID: $characteristicUuid');
+              _logger.i('  Command: $command');
+              _logger.i(
+                  '  Raw bytes: ${value.map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}').join(', ')}');
+
+              await characteristic.write(value, withoutResponse: true);
+              _logger.i('Successfully wrote command: $command');
+              return true;
+            }
+          }
+        }
+      }
+
+      _logger.e('Service or characteristic not found');
+      return false;
     } catch (e) {
       _logger.e('Error writing characteristic: $e');
       return false;

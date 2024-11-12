@@ -314,7 +314,11 @@ class _MyDevicePageState extends State<MyDevicePage>
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
-                if (!isConnected) {
+                if (isConnected) {
+                  // Return to home page after successful connection
+                  context.router.popUntil(
+                      (route) => route.settings.name == HomeRoute.name);
+                } else {
                   _startScan(); // Restart scanning after disconnection
                 }
               },
@@ -329,14 +333,34 @@ class _MyDevicePageState extends State<MyDevicePage>
     return AppBar(
       backgroundColor: const Color(0xFF1F2225),
       leadingWidth: 150,
-      leading: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: SvgPicture.asset(
-          'assets/images/logoNavigation.svg',
-          fit: BoxFit.contain,
-          width: 85,
-          height: 85,
-        ),
+      leading: Row(
+        children: [
+          // Return button with connection state check
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              final currentState = context.read<MyDeviceBloc>().state;
+              if (currentState is MyDeviceConnected) {
+                // If connected, go back to home
+                context.router
+                    .popUntil((route) => route.settings.name == HomeRoute.name);
+              } else {
+                // If not connected, just go back one step
+                context.router.popForced();
+              }
+            },
+          ),
+          // Logo
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: SvgPicture.asset(
+                'assets/images/logoNavigation.svg',
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ],
       ),
       actions: [
         BlocBuilder<MyDeviceBloc, MyDeviceState>(
@@ -362,12 +386,6 @@ class _MyDevicePageState extends State<MyDevicePage>
           icon: const Icon(Icons.account_circle, color: Colors.white),
           onPressed: () {
             // Handle avatar action
-          },
-        ),
-        IconButton(
-          icon: const Icon(Icons.logout, color: Colors.white),
-          onPressed: () {
-            context.router.replaceAll([const LoginRoute()]);
           },
         ),
       ],

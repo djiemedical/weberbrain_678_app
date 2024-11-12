@@ -146,7 +146,11 @@ Future<void> init() async {
   );
 
   // Session Timer
-  getIt.registerFactory(() => BackgroundSessionBloc());
+  getIt.registerFactory(
+    () => BackgroundSessionBloc(
+      bleService: getIt<BleService>(),
+    ),
+  );
 
   // Settings
   getIt.registerLazySingleton<SettingsLocalDataSource>(

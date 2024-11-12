@@ -3,13 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:flash/flash.dart';
+import 'dart:async';
 import '../../../session_timer/presentation/bloc/background_session_bloc.dart';
 import '../../domain/usecases/get_regions.dart';
 import '../../domain/usecases/get_output_power.dart';
 import '../../domain/usecases/get_frequency.dart';
 import '../../../../config/routes/app_router.dart';
 import '../../../../core/di/injection_container.dart';
-import '../bloc/default_settings_state.dart';
+
+class RegionSettings {
+  Map<String, int> outputPower;
+  int frequency;
+
+  RegionSettings({
+    required this.outputPower,
+    required this.frequency,
+  });
+
+  RegionSettings copyWith({
+    Map<String, int>? outputPower,
+    int? frequency,
+  }) {
+    return RegionSettings(
+      outputPower: outputPower ?? this.outputPower,
+      frequency: frequency ?? this.frequency,
+    );
+  }
+}
 
 class DefaultSettingsBox extends StatefulWidget {
   final bool isDeviceConnected;
@@ -33,22 +53,38 @@ class DefaultSettingsBox extends StatefulWidget {
 
 class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
   int _duration = 30;
-  final Map<String, RegionSettings> _regionSettings = {
-    'All': RegionSettings(outputPower: {}, frequency: 0),
-    'Frontal': RegionSettings(outputPower: {}, frequency: 0),
-    'Temporal Left': RegionSettings(outputPower: {}, frequency: 0),
-    'Temporal Right': RegionSettings(outputPower: {}, frequency: 0),
-    'Parietal': RegionSettings(outputPower: {}, frequency: 0),
-    'Occipital': RegionSettings(outputPower: {}, frequency: 0),
-  };
-  Set<String> _selectedRegions = {'All'};
+  Timer? _powerUpdateTimer;
+  final Map<String, Map<String, int>> _pendingPowerUpdates = {};
 
-  final Map<String, String> _regionMasks = {
-    'Frontal': 'Front',
-    'Temporal Left': 'Left',
-    'Temporal Right': 'Right',
-    'Parietal': 'Top',
-    'Occipital': 'Back',
+  final Map<String, RegionSettings> _regionSettings = <String, RegionSettings>{
+    'All': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+    'Front': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+    'Left': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+    'Right': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+    'Top': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+    'Back': RegionSettings(
+        outputPower: <String, int>{'650nm': 50, '808nm': 50, '1064nm': 50},
+        frequency: 0),
+  };
+
+  Set<String> _selectedRegions = <String>{'All'};
+
+  final Map<String, String> _regionMasks = <String, String>{
+    'Front': 'Front/Prefrontal',
+    'Left': 'Left/Temporal',
+    'Right': 'Right/Temporal',
+    'Top': 'Top/Parietal',
+    'Back': 'Back/Occipital',
   };
 
   @override
@@ -65,7 +101,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     setState(() {
       regionsResult.fold(
         (failure) {
-          _selectedRegions = {'All'};
+          _selectedRegions = <String>{'All'};
         },
         (regions) {
           if (regions.isNotEmpty) {
@@ -77,7 +113,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
         (failure) {},
         (power) {
           _regionSettings.forEach((key, value) {
-            value.outputPower = Map.from(power);
+            value.outputPower = Map<String, int>.from(power);
           });
         },
       );
@@ -90,6 +126,108 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
         },
       );
     });
+
+    if (_selectedRegions.isNotEmpty) {
+      _updateParametersForRegion(_selectedRegions.first);
+    }
+  }
+
+  void _updateFrequencyForAllSelectedRegions(int frequency) {
+    // If 'All' is selected, only send command for region 'All'
+    final regions =
+        _selectedRegions.contains('All') ? {'All'} : _selectedRegions;
+
+    for (final region in regions) {
+      if (_regionSettings.containsKey(region)) {
+        _regionSettings[region]!.frequency = frequency;
+        _updateParametersForRegion(region, force: true);
+      }
+    }
+  }
+
+  void _updateParametersForRegion(String region, {bool force = false}) {
+    final settings = _regionSettings[region];
+    if (settings == null) return;
+
+    final mappedRegion = _getMappedRegion(region);
+
+    if (!force) {
+      _pendingPowerUpdates[region] = Map.from(settings.outputPower);
+      return;
+    }
+
+    if (region == 'All') {
+      settings.outputPower.forEach((wavelength, power) {
+        context.read<BackgroundSessionBloc>().sendParameters(
+              region: 'all',
+              wavelength: wavelength,
+              outputPower: power,
+              frequency: settings.frequency,
+            );
+      });
+    } else {
+      settings.outputPower.forEach((wavelength, power) {
+        context.read<BackgroundSessionBloc>().sendParameters(
+              region: mappedRegion,
+              wavelength: wavelength,
+              outputPower: power,
+              frequency: settings.frequency,
+            );
+      });
+    }
+  }
+
+  void _debouncedPowerUpdate() {
+    _powerUpdateTimer?.cancel();
+    _powerUpdateTimer = Timer(const Duration(milliseconds: 200), () {
+      _pendingPowerUpdates.forEach((region, _) {
+        _updateParametersForRegion(region, force: true);
+      });
+      _pendingPowerUpdates.clear();
+    });
+  }
+
+  String _getMappedRegion(String region) {
+    switch (region.toLowerCase()) {
+      case 'front':
+      case 'front/prefrontal':
+        return 'Front/Prefrontal';
+      case 'left':
+      case 'left/temporal':
+        return 'Left/Temporal';
+      case 'top':
+      case 'top/parietal':
+        return 'Top/Parietal';
+      case 'right':
+      case 'right/temporal':
+        return 'Right/Temporal';
+      case 'back':
+      case 'back/occipital':
+        return 'Back/Occipital';
+      case 'all':
+        return 'all';
+      default:
+        return region;
+    }
+  }
+
+  void _updatePowerForRegion(String region, int power,
+      {String? specificWavelength}) {
+    final settings = _regionSettings[region];
+    if (settings == null) return;
+
+    if (specificWavelength != null) {
+      settings.outputPower[specificWavelength] = power;
+    } else {
+      settings.outputPower = {
+        '650nm': power,
+        '808nm': power,
+        '1064nm': power,
+      };
+    }
+
+    _updateParametersForRegion(region);
+    _debouncedPowerUpdate();
   }
 
   void _showDurationPicker() {
@@ -193,30 +331,37 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                         itemCount: regions.length,
                         itemBuilder: (context, index) {
                           final region = regions[index];
+                          final isSelected = _selectedRegions.contains(region);
+
                           return CheckboxListTile(
                             title: Text(region,
                                 style: const TextStyle(color: Colors.white)),
                             subtitle: region != 'All'
-                                ? Text(_regionMasks[region]!,
+                                ? Text(_regionMasks[region] ?? '',
                                     style: const TextStyle(color: Colors.grey))
                                 : null,
-                            value: _selectedRegions.contains(region),
+                            value: isSelected,
                             onChanged: (bool? value) {
+                              if (value == null) return;
+
                               setModalState(() {
                                 if (region == 'All') {
-                                  if (value == true) {
+                                  if (value) {
                                     _selectedRegions = {'All'};
+                                    _updateParametersForRegion('All');
                                   } else {
                                     _selectedRegions.clear();
                                   }
                                 } else {
-                                  if (value == true) {
+                                  if (value) {
                                     _selectedRegions.remove('All');
                                     _selectedRegions.add(region);
+                                    _updateParametersForRegion(region);
                                   } else {
                                     _selectedRegions.remove(region);
                                     if (_selectedRegions.isEmpty) {
                                       _selectedRegions.add('All');
+                                      _updateParametersForRegion('All');
                                     }
                                   }
                                 }
@@ -239,16 +384,6 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     );
   }
 
-  void _updateFrequencyForAllSelectedRegions(int frequency) {
-    final regions = _selectedRegions.contains('All')
-        ? _regionSettings.keys.toSet()
-        : _selectedRegions;
-
-    for (final region in regions) {
-      _regionSettings[region]!.frequency = frequency;
-    }
-  }
-
   void _showOutputPowerSelector() {
     int allPower = 0;
     bool isAllControlled = false;
@@ -268,7 +403,7 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return SizedBox(
-              height: 400,
+              height: 500,
               child: Column(
                 children: [
                   AppBar(
@@ -282,7 +417,13 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                     actions: [
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () {
+                          _pendingPowerUpdates.forEach((region, _) {
+                            _updateParametersForRegion(region, force: true);
+                          });
+                          _pendingPowerUpdates.clear();
+                          Navigator.pop(context);
+                        },
                       ),
                     ],
                   ),
@@ -297,25 +438,30 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                               allPower = value.round();
                               isAllControlled = true;
                               currentPower.updateAll((key, _) => allPower);
-                              for (var region
-                                  in _selectedRegions.contains('All')
-                                      ? _regionSettings.keys
-                                      : _selectedRegions) {
-                                _regionSettings[region]!
-                                    .outputPower
-                                    .updateAll((key, _) => allPower);
+
+                              if (_selectedRegions.contains('All')) {
+                                _updatePowerForRegion('All', allPower);
+                              } else {
+                                for (var region in _selectedRegions) {
+                                  _updatePowerForRegion(region, allPower);
+                                }
                               }
                             });
-                            setState(() {});
+                          },
+                          onChangeEnd: (value) {
+                            _debouncedPowerUpdate();
                           },
                         ),
                         const Divider(color: Colors.grey),
-                        ...currentPower.entries.map((entry) {
-                          final wavelength = entry.key;
+                        ...[
+                          {'label': '650nm (Red)', 'key': '650nm'},
+                          {'label': '808nm (NIR)', 'key': '808nm'},
+                          {'label': '1064nm (NIR)', 'key': '1064nm'},
+                        ].map((wavelengthData) {
                           return _buildPowerSlider(
-                            wavelength,
+                            wavelengthData['label']!,
                             _regionSettings[referenceRegion]!
-                                .outputPower[wavelength]!,
+                                .outputPower[wavelengthData['key']]!,
                             (value) {
                               setModalState(() {
                                 if (isAllControlled) {
@@ -323,15 +469,26 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                                   allPower = 0;
                                 }
                                 final newPower = value.round();
-                                for (var region
-                                    in _selectedRegions.contains('All')
-                                        ? _regionSettings.keys
-                                        : _selectedRegions) {
-                                  _regionSettings[region]!
-                                      .outputPower[wavelength] = newPower;
+
+                                if (_selectedRegions.contains('All')) {
+                                  _updatePowerForRegion(
+                                    'All',
+                                    newPower,
+                                    specificWavelength: wavelengthData['key'],
+                                  );
+                                } else {
+                                  for (var region in _selectedRegions) {
+                                    _updatePowerForRegion(
+                                      region,
+                                      newPower,
+                                      specificWavelength: wavelengthData['key'],
+                                    );
+                                  }
                                 }
                               });
-                              setState(() {});
+                            },
+                            onChangeEnd: (value) {
+                              _debouncedPowerUpdate();
                             },
                           );
                         }),
@@ -344,39 +501,6 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
           },
         );
       },
-    );
-  }
-
-  Widget _buildPowerSlider(
-      String label, int power, ValueChanged<double> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 70,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: Text(label, style: const TextStyle(color: Colors.white)),
-            ),
-          ),
-          Expanded(
-            child: Slider(
-              value: power.toDouble(),
-              min: 0,
-              max: 100,
-              divisions: 20,
-              onChanged: onChanged,
-              activeColor: const Color(0xFF2691A5),
-              inactiveColor: Colors.grey,
-            ),
-          ),
-          SizedBox(
-            width: 50,
-            child: Text('$power%', style: const TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -466,6 +590,41 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildPowerSlider(
+      String label, int power, ValueChanged<double> onChanged,
+      {ValueChanged<double>? onChangeEnd}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 70,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16.0),
+              child: Text(label, style: const TextStyle(color: Colors.white)),
+            ),
+          ),
+          Expanded(
+            child: Slider(
+              value: power.toDouble(),
+              min: 0,
+              max: 100,
+              divisions: 20,
+              onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
+              activeColor: const Color(0xFF2691A5),
+              inactiveColor: Colors.grey,
+            ),
+          ),
+          SizedBox(
+            width: 50,
+            child: Text('$power%', style: const TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -594,30 +753,97 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: SettingItem(
-                        label: 'Region',
-                        values: [_getDisplayRegions()],
+                      child: GestureDetector(
                         onTap: _showRegionSelector,
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Region',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 20),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _getDisplayRegions(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: SettingItem(
-                        label: 'Power',
-                        values: _regionSettings[_selectedRegions.first]!
-                            .outputPower
-                            .entries
-                            .map((e) => '${e.key}: ${e.value}%')
-                            .toList(),
+                      child: GestureDetector(
                         onTap: _showOutputPowerSelector,
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Power',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 20),
+                            ),
+                            const SizedBox(height: 4),
+                            Column(
+                              children: [
+                                Text(
+                                  '650: ${_regionSettings[_selectedRegions.first]!.outputPower['650nm']}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                Text(
+                                  '808: ${_regionSettings[_selectedRegions.first]!.outputPower['808nm']}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                Text(
+                                  '1064: ${_regionSettings[_selectedRegions.first]!.outputPower['1064nm']}%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     Expanded(
-                      child: SettingItem(
-                        label: 'Frequency',
-                        values: [
-                          '${_regionSettings[_selectedRegions.first]!.frequency} Hz'
-                        ],
+                      child: GestureDetector(
                         onTap: _showFrequencySelector,
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Frequency',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 20),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_regionSettings[_selectedRegions.first]!.frequency} Hz',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -635,45 +861,10 @@ class _DefaultSettingsBoxState extends State<DefaultSettingsBox> {
     int remainingSeconds = seconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
-}
-
-class SettingItem extends StatelessWidget {
-  final String label;
-  final List<String> values;
-  final VoidCallback? onTap;
-
-  const SettingItem({
-    super.key,
-    required this.label,
-    required this.values,
-    this.onTap,
-  });
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.grey, fontSize: 20),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          ...values.map((value) => Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              )),
-        ],
-      ),
-    );
+  void dispose() {
+    _powerUpdateTimer?.cancel();
+    super.dispose();
   }
 }

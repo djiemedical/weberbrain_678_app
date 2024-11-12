@@ -16,6 +16,7 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
   final ConnectDevice connectDevice;
   final DisconnectDevice disconnectDevice;
   final Logger _logger = Logger();
+  BleDevice? _lastConnectedDevice;
 
   MyDeviceBloc({
     required this.scanDevices,
@@ -31,6 +32,13 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
   Future<void> _onScanDevices(
       ScanDevicesEvent event, Emitter<MyDeviceState> emit) async {
     _logger.d('Starting device scan');
+
+    // If there's a connected device, maintain that state
+    if (_lastConnectedDevice != null) {
+      emit(MyDeviceConnected(_lastConnectedDevice!));
+      return;
+    }
+
     emit(MyDeviceScanning());
 
     final result = await scanDevices(NoParams());
@@ -55,10 +63,12 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
     result.fold(
       (failure) {
         _logger.e('Connection failed: $failure');
+        _lastConnectedDevice = null;
         emit(const MyDeviceError('Failed to connect to device'));
       },
       (success) {
         _logger.i('Successfully connected to device: ${event.device.name}');
+        _lastConnectedDevice = event.device;
         emit(MyDeviceConnected(event.device));
       },
     );
@@ -78,14 +88,22 @@ class MyDeviceBloc extends Bloc<MyDeviceEvent, MyDeviceState> {
       (success) {
         _logger
             .i('Successfully disconnected from device: ${event.device.name}');
+        _lastConnectedDevice = null;
         emit(MyDeviceDisconnected(event.device));
-        add(ScanDevicesEvent()); // Restart scanning after disconnection
+        add(ScanDevicesEvent());
       },
     );
   }
 
-  void _onCheckConnectionStatus(
-      CheckConnectionStatusEvent event, Emitter<MyDeviceState> emit) {
-    emit(MyDeviceInitial());
+  Future<void> _onCheckConnectionStatus(
+      CheckConnectionStatusEvent event, Emitter<MyDeviceState> emit) async {
+    if (_lastConnectedDevice != null) {
+      _logger.d(
+          'Restoring connection state for device: ${_lastConnectedDevice!.name}');
+      emit(MyDeviceConnected(_lastConnectedDevice!));
+    } else {
+      _logger.d('No previous connection found, starting scan');
+      add(ScanDevicesEvent());
+    }
   }
 }

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
+import '../../../../core/config/feature_flags.dart';
 
 class OpticalPowerChart extends StatefulWidget {
   final double maxHeight;
@@ -30,6 +31,25 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
     '1064nm': 15.7,
   };
 
+  // Constants for layout calculations
+  static const double _titleHeight = 20.0;
+  static const double _titleSpacing = 6.0;
+  static const double _labelHeight = 17.0;
+  static const double _labelSpacing = 1.0;
+  static const double _valueHeight = 17.0;
+  static const double _containerPadding = 12.0;
+  static const double _barBottomSpacing = 3.0;
+  static const double _horizontalSpacing = 8.0;
+
+  double get _minHeight {
+    return _containerPadding * 2 +
+        _titleHeight +
+        _titleSpacing +
+        _labelHeight +
+        _labelSpacing +
+        _valueHeight;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -46,14 +66,9 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
     _updateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       setState(() {
         _powerLevels = _powerLevels.map((wavelength, currentPower) {
-          // Add random variation within a small range
-          final variation =
-              (_random.nextDouble() - 0.5) * 2.0; // ±1.0W variation
+          final variation = (_random.nextDouble() - 0.5) * 2.0;
           double newPower = currentPower + variation;
-
-          // Ensure power stays within reasonable bounds
           newPower = newPower.clamp(0.0, _getMaxPower(wavelength));
-
           return MapEntry(wavelength, newPower);
         });
       });
@@ -62,54 +77,96 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
 
   @override
   Widget build(BuildContext context) {
+    final containerHeight =
+        FeatureFlags.showPowerMonitoringChart ? widget.maxHeight : _minHeight;
+
     return Container(
       constraints: BoxConstraints(
-        maxHeight: widget.maxHeight,
-        minHeight: 100.0,
+        maxHeight: containerHeight,
+        minHeight: _minHeight,
       ),
       decoration: BoxDecoration(
         color: const Color(0xFF2A2D30),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(_containerPadding),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
             'Output Power',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 20, // Increased from 16
+              fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final barWidth =
-                    (constraints.maxWidth - 32) / _powerLevels.length;
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: _powerLevels.entries.map((entry) {
-                    return _buildPowerBar(
-                      wavelength: entry.key,
-                      power: entry.value,
-                      barWidth: barWidth,
-                      maxBarHeight: constraints.maxHeight -
-                          55, // Adjusted for larger text
-                      maxPower: _getMaxPower(entry.key),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ),
+          const SizedBox(height: _titleSpacing),
+          if (FeatureFlags.showPowerMonitoringChart)
+            Expanded(child: _buildBarChart())
+          else
+            _buildPowerValues(),
         ],
       ),
+    );
+  }
+
+  Widget _buildBarChart() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final barWidth = (availableWidth -
+                (_horizontalSpacing * (_powerLevels.length - 1))) /
+            _powerLevels.length;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: _powerLevels.entries.map((entry) {
+            return _buildPowerBar(
+              wavelength: entry.key,
+              power: entry.value,
+              barWidth: barWidth,
+              maxBarHeight: constraints.maxHeight -
+                  (_labelHeight +
+                      _labelSpacing +
+                      _valueHeight +
+                      _barBottomSpacing),
+              maxPower: _getMaxPower(entry.key),
+              showBar: true,
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildPowerValues() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth;
+        final barWidth = (availableWidth -
+                (_horizontalSpacing * (_powerLevels.length - 1))) /
+            _powerLevels.length;
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: _powerLevels.entries.map((entry) {
+            return _buildPowerBar(
+              wavelength: entry.key,
+              power: entry.value,
+              barWidth: barWidth,
+              maxBarHeight: 0,
+              maxPower: _getMaxPower(entry.key),
+              showBar: false,
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -119,6 +176,7 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
     required double barWidth,
     required double maxBarHeight,
     required double maxPower,
+    required bool showBar,
   }) {
     final percentage = (power / maxPower).clamp(0.0, 1.0);
     final barHeight = maxBarHeight * percentage;
@@ -129,46 +187,50 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          TweenAnimationBuilder<double>(
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeInOut,
-            tween: Tween<double>(
-              begin: 0,
-              end: barHeight,
-            ),
-            builder: (context, value, child) {
-              return Container(
-                width: barWidth * 0.6,
-                height: value,
-                decoration: BoxDecoration(
-                  color: widget.wavelengthColors[wavelength],
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(4),
+          if (showBar) ...[
+            TweenAnimationBuilder<double>(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+              tween: Tween<double>(
+                begin: 0,
+                end: barHeight,
+              ),
+              builder: (context, value, child) {
+                return Container(
+                  width: barWidth * 0.6,
+                  height: value,
+                  decoration: BoxDecoration(
+                    color: widget.wavelengthColors[wavelength],
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(4),
+                    ),
                   ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Text(
-            wavelength,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17, // Increased from 12
+                );
+              },
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${power.toStringAsFixed(1)}W',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17, // Increased from 12
-              fontWeight: FontWeight.bold,
+            const SizedBox(height: _barBottomSpacing),
+          ],
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              wavelength,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: _labelSpacing),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '${power.toStringAsFixed(1)}W',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -176,7 +238,6 @@ class _OpticalPowerChartState extends State<OpticalPowerChart> {
   }
 
   double _getMaxPower(String wavelength) {
-    // Maximum power levels in Watts
     const maxPowerLevels = {
       '650nm': 18.318,
       '808nm': 10.440,
